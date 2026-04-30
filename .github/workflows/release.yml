@@ -8,6 +8,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      sha256_arm64: ${{ steps.checksums.outputs.sha256_arm64 }}
+      sha256_x64: ${{ steps.checksums.outputs.sha256_x64 }}
     steps:
       - uses: actions/checkout@v4
 
@@ -23,15 +26,51 @@ jobs:
           GOOS=darwin GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o releases/scraper-gen-macos-x64 .
 
       - name: Compute checksums
+        id: checksums
         run: |
-          sha256sum releases/scraper-gen-macos-arm64 > releases/scraper-gen-macos-arm64.sha256
-          sha256sum releases/scraper-gen-macos-x64 > releases/scraper-gen-macos-x64.sha256
+          SHA256_ARM64=$(sha256sum releases/scraper-gen-macos-arm64 | awk '{print $1}')
+          SHA256_X64=$(sha256sum releases/scraper-gen-macos-x64 | awk '{print $1}')
+          echo "sha256_arm64=${SHA256_ARM64}" >> "$GITHUB_OUTPUT"
+          echo "sha256_x64=${SHA256_X64}" >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
             releases/scraper-gen-macos-arm64
-            releases/scraper-gen-macos-arm64.sha256
             releases/scraper-gen-macos-x64
-            releases/scraper-gen-macos-x64.sha256
+
+  update-tap:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: gvercaemer/homebrew-tap
+          token: ${{ secrets.TAP_GITHUB_TOKEN }}
+
+      - name: Update formula
+        env:
+          VERSION: ${{ github.ref_name }}
+          SHA256_ARM64: ${{ needs.build.outputs.sha256_arm64 }}
+          SHA256_X64: ${{ needs.build.outputs.sha256_x64 }}
+        run: |
+          python3 - <<'EOF'
+          import re, os
+          content = open("Formula/scraper-gen.rb").read()
+          version = os.environ["VERSION"].lstrip("v")
+          arm64 = os.environ["SHA256_ARM64"]
+          x64 = os.environ["SHA256_X64"]
+          content = re.sub(r'version "[^"]*"', f'version "{version}"', content)
+          content = re.sub(r'(scraper-gen-macos-arm64"\n\s+sha256 ")[^"]*"', f'\\g<1>{arm64}"', content)
+          content = re.sub(r'(scraper-gen-macos-x64"\n\s+sha256 ")[^"]*"', f'\\g<1>{x64}"', content)
+          open("Formula/scraper-gen.rb", "w").write(content)
+          EOF
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/scraper-gen.rb
+          git commit -m "scraper-gen ${{ github.ref_name }}"
+          git push
