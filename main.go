@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -20,12 +21,23 @@ var version = "dev"
 
 var tplVarRe = regexp.MustCompile(`\{\{(\w+)\}\}`)
 
-var scraperTypeOptions = []string{
-	"products/delivery",
-	"products/drive",
-	"retailOutlets",
-	"productDetails",
+var motivations = []string{
+	"Scraper built. Time to collect some data.",
+	"The internet has no secrets from you.",
+	"Another scraper, another dataset. You're unstoppable.",
+	"Go get that data. It's waiting for you.",
+	"Clean boilerplate, clean mind. You've got this.",
+	"Less copy-paste, more shipping. That's the way.",
+	"Your future self thanks you for the templates.",
 }
+
+const (
+	colorGreen  = "\033[32m"
+	colorYellow = "\033[33m"
+	colorCyan   = "\033[36m"
+	colorBold   = "\033[1m"
+	colorReset  = "\033[0m"
+)
 
 func main() {
 	flags := flag.NewFlagSet("scraper-gen", flag.ExitOnError)
@@ -128,12 +140,19 @@ func runGenerate(site, locale string, scraperTypes []string, dryRun bool) {
 		}
 	}
 
+	fmt.Println()
 	for _, t := range scraperTypes {
 		if err := generate(site, locale, t); err != nil {
 			fmt.Fprintln(os.Stderr, err.Error())
 			os.Exit(1)
 		}
 	}
+
+	fmt.Printf("\n%sNext steps:%s\n", colorYellow, colorReset)
+	fmt.Println("  1. Implement getAllUrl() and getDataFromUrl() logic in index.js")
+	fmt.Println("  2. Fill in config.js: browser, dataSelectors...")
+	fmt.Println("  3. Add transformer functions to transformers.js as needed")
+	fmt.Printf("\n%s%s%s\n", colorCyan, motivations[rand.Intn(len(motivations))], colorReset)
 }
 
 func generate(site, locale, scraperType string) error {
@@ -162,14 +181,7 @@ func generate(site, locale, scraperType string) error {
 		}
 	}
 
-	fmt.Printf("\nCreated scraper at: %s\n", targetPath)
-	fmt.Println("  config.js")
-	fmt.Println("  index.js")
-	fmt.Println("  transformers.js")
-	fmt.Println("\nNext steps:")
-	fmt.Println("  1. Implement getAllUrl() and getDataFromUrl() logic in index.js")
-	fmt.Println("  2. Fill in config.js: browser, dataSelectors...")
-	fmt.Println("  3. Add transformer functions to transformers.js as needed")
+	fmt.Printf("  %s✓%s  %s\n", colorGreen, colorReset, targetPath)
 
 	return nil
 }
