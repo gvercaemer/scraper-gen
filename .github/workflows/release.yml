@@ -8,6 +8,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     outputs:
       sha256_arm64: ${{ steps.checksums.outputs.sha256_arm64 }}
       sha256_x64: ${{ steps.checksums.outputs.sha256_x64 }}
