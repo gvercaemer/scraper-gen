@@ -23,7 +23,9 @@ const pageManager = require('@services/pageManager')(config)
  */
 const getAllUrl = async (browser, params) => {
   const page = await pageManager.load(browser, url, params)
-  // TODO: build and return the list of URLs to scrape
+  const urls = await page.evaluate(() => {
+    // TODO: build and return the list of URLs to scrape
+  })
   // Example: return [`${config.url}/api/search?query=${params.query}`]
 
   return urls

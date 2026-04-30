@@ -21,9 +21,12 @@ const pageManager = require('@services/pageManager')(config)
  * @param {Object} params
  * @returns {Promise<string[]>}
  */
-const getAllUrl = (browser, params) => {
+const getAllUrl = async (browser, params) => {
   const page = await pageManager.load(browser, url, params)
-  // TODO: build and return the list of URLs to scrape
+  const urls = await page.evaluate(() => {
+    // TODO: build and return the list of URLs to scrape
+  })
+
   // Example: return [`${config.url}/api/stores`]
 
   return urls
@@ -45,3 +48,4 @@ const getDataFromUrl = async (browser, url) => {
 }
 
 module.exports = { getAllUrl, getDataFromUrl }
+
