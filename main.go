@@ -3,6 +3,7 @@ package main
 import (
 	"embed"
 	"errors"
+	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -19,13 +20,46 @@ var version = "dev"
 
 var tplVarRe = regexp.MustCompile(`\{\{(\w+)\}\}`)
 
+var scraperTypeOptions = []string{
+	"products/delivery",
+	"products/drive",
+	"retailOutlets",
+	"productDetails",
+}
+
 func main() {
-	if len(os.Args) > 1 && (os.Args[1] == "--version" || os.Args[1] == "-v") {
+	flags := flag.NewFlagSet("scraper-gen", flag.ExitOnError)
+	versionFlag := flags.Bool("version", false, "print version")
+	vFlag := flags.Bool("v", false, "print version")
+	siteFlag := flags.String("site", "", "site name (e.g. amazon)")
+	localeFlag := flags.String("locale", "", "locale (e.g. fr, co.uk)")
+	typeFlag := flags.String("type", "", "comma-separated scraper types")
+	dryRun := flags.Bool("dry-run", false, "print what would be generated without writing files")
+
+	_ = flags.Parse(os.Args[1:])
+
+	if *versionFlag || *vFlag {
 		fmt.Println(version)
 		os.Exit(0)
 	}
 
-	var site, locale, scraperType string
+	site := strings.TrimSpace(*siteFlag)
+	locale := strings.TrimSpace(*localeFlag)
+	var scraperTypes []string
+	if *typeFlag != "" {
+		for _, t := range strings.Split(*typeFlag, ",") {
+			scraperTypes = append(scraperTypes, strings.TrimSpace(t))
+		}
+	}
+
+	// Non-interactive path: all flags provided
+	if site != "" && locale != "" && len(scraperTypes) > 0 {
+		runGenerate(site, locale, scraperTypes, *dryRun)
+		return
+	}
+
+	// Interactive path
+	var scraperTypesInteractive []string
 
 	form := huh.NewForm(
 		huh.NewGroup(
@@ -47,15 +81,21 @@ func main() {
 					}
 					return nil
 				}),
-			huh.NewSelect[string]().
-				Title("Scraper type").
+			huh.NewMultiSelect[string]().
+				Title("Scraper type(s)").
 				Options(
 					huh.NewOption("products/delivery", "products/delivery"),
 					huh.NewOption("products/drive", "products/drive"),
 					huh.NewOption("retailOutlets", "retailOutlets"),
 					huh.NewOption("productDetails", "productDetails"),
 				).
-				Value(&scraperType),
+				Validate(func(v []string) error {
+					if len(v) == 0 {
+						return errors.New("select at least one scraper type")
+					}
+					return nil
+				}).
+				Value(&scraperTypesInteractive),
 		),
 	)
 
@@ -64,18 +104,40 @@ func main() {
 		os.Exit(0)
 	}
 
-	if err := generate(strings.TrimSpace(site), strings.TrimSpace(locale), scraperType); err != nil {
-		fmt.Fprintln(os.Stderr, err.Error())
-		os.Exit(1)
+	runGenerate(strings.TrimSpace(site), strings.TrimSpace(locale), scraperTypesInteractive, *dryRun)
+}
+
+func runGenerate(site, locale string, scraperTypes []string, dryRun bool) {
+	if dryRun {
+		fmt.Println("\nWould create:")
+		for _, t := range scraperTypes {
+			base := filepath.Join("src", "sites", site, locale, t)
+			fmt.Printf("  %s/config.js\n", base)
+			fmt.Printf("  %s/index.js\n", base)
+			fmt.Printf("  %s/transformers.js\n", base)
+		}
+		return
+	}
+
+	// Check all target paths before writing anything
+	for _, t := range scraperTypes {
+		targetPath := filepath.Join("src", "sites", site, locale, t)
+		if _, err := os.Stat(targetPath); err == nil {
+			fmt.Fprintf(os.Stderr, "\nDirectory already exists: %s\nAborting to avoid overwriting existing scraper.\n", targetPath)
+			os.Exit(1)
+		}
+	}
+
+	for _, t := range scraperTypes {
+		if err := generate(site, locale, t); err != nil {
+			fmt.Fprintln(os.Stderr, err.Error())
+			os.Exit(1)
+		}
 	}
 }
 
 func generate(site, locale, scraperType string) error {
 	targetPath := filepath.Join("src", "sites", site, locale, scraperType)
-
-	if _, err := os.Stat(targetPath); err == nil {
-		return fmt.Errorf("\nDirectory already exists: %s\nAborting to avoid overwriting existing scraper.", targetPath)
-	}
 
 	if err := os.MkdirAll(targetPath, 0755); err != nil {
 		return err
