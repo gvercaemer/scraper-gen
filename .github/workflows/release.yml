@@ -1,0 +1,37 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Build
+        run: |
+          mkdir -p releases
+          LDFLAGS="-X main.version=${GITHUB_REF_NAME}"
+          GOOS=darwin GOARCH=arm64 go build -ldflags="${LDFLAGS}" -o releases/scraper-gen-macos-arm64 .
+          GOOS=darwin GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o releases/scraper-gen-macos-x64 .
+
+      - name: Compute checksums
+        run: |
+          sha256sum releases/scraper-gen-macos-arm64 > releases/scraper-gen-macos-arm64.sha256
+          sha256sum releases/scraper-gen-macos-x64 > releases/scraper-gen-macos-x64.sha256
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            releases/scraper-gen-macos-arm64
+            releases/scraper-gen-macos-arm64.sha256
+            releases/scraper-gen-macos-x64
+            releases/scraper-gen-macos-x64.sha256
